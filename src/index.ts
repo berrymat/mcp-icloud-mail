@@ -13,6 +13,10 @@ import { flagMessagesSchema, handleFlagMessages } from "./tools/flagMessages.js"
 import { createMailboxSchema, handleCreateMailbox } from "./tools/createMailbox.js";
 import { deleteMailboxSchema, handleDeleteMailbox } from "./tools/deleteMailbox.js";
 import { sendMessageSchema, handleSendMessage } from "./tools/sendMessage.js";
+import { processDeleteRulesSchema, handleProcessDeleteRules } from "./tools/processDeleteRules.js";
+import { processJunkRulesSchema, handleProcessJunkRules } from "./tools/processJunkRules.js";
+import { processKeepLatestRulesSchema, handleProcessKeepLatestRules } from "./tools/processKeepLatestRules.js";
+import { processAllRulesSchema, handleProcessAllRules } from "./tools/processAllRules.js";
 import { disconnectImap } from "./imap.js";
 
 const server = new McpServer({
@@ -161,6 +165,64 @@ server.tool(
   async (args) => {
     try {
       const result = await handleSendMessage(args);
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+    }
+  }
+);
+
+// --- Rule-Based Cleanup ---
+
+server.tool(
+  "process_delete_rules",
+  "Delete all messages from senders listed in config.json delete rules. Moves them to Deleted Messages.",
+  processDeleteRulesSchema,
+  async () => {
+    try {
+      const result = await handleProcessDeleteRules();
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  "process_junk_rules",
+  "Move all messages from senders listed in config.json junk rules to the Junk folder.",
+  processJunkRulesSchema,
+  async () => {
+    try {
+      const result = await handleProcessJunkRules();
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  "process_keep_latest_rules",
+  "For senders in config.json keepLatest rules, keep only the most recent message and trash the rest.",
+  processKeepLatestRulesSchema,
+  async () => {
+    try {
+      const result = await handleProcessKeepLatestRules();
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  "process_all_rules",
+  "Run all configured email cleanup rules (delete, junk, keep-latest) from config.json in sequence.",
+  processAllRulesSchema,
+  async () => {
+    try {
+      const result = await handleProcessAllRules();
       return { content: [{ type: "text", text: result }] };
     } catch (error) {
       return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
