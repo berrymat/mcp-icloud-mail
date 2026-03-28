@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 import { pathToFileURL } from "url";
+import { stat } from "fs/promises";
 
 // Static schema imports — these define the tool API and rarely change
 import { listMailboxesSchema } from "./tools/listMailboxes.js";
@@ -26,13 +27,25 @@ import { disconnectImap } from "./imap.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Dynamically import a handler module, bypassing Node's module cache.
- * This lets us pick up code changes after `npm run build` without restarting.
+ * Dynamically import a handler module, reloading only when the file changes.
+ * Caches by file mtime so we avoid unnecessary disk I/O on every call,
+ * but still pick up changes immediately after `npm run build`.
  */
+const moduleCache = new Map<string, { mtimeMs: number; mod: Record<string, unknown> }>();
+
 async function load<T>(modulePath: string, exportName: string): Promise<T> {
   const fullPath = resolve(__dirname, modulePath);
-  const url = pathToFileURL(fullPath).href + "?t=" + Date.now();
+  const { mtimeMs } = await stat(fullPath);
+  const cached = moduleCache.get(fullPath);
+
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.mod[exportName] as T;
+  }
+
+  // Cache-bust with mtime so Node treats it as a new module
+  const url = pathToFileURL(fullPath).href + "?t=" + mtimeMs;
   const mod = await import(url);
+  moduleCache.set(fullPath, { mtimeMs, mod });
   return mod[exportName] as T;
 }
 
