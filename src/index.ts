@@ -13,6 +13,7 @@ import { flagMessagesSchema, handleFlagMessages } from "./tools/flagMessages.js"
 import { createMailboxSchema, handleCreateMailbox } from "./tools/createMailbox.js";
 import { deleteMailboxSchema, handleDeleteMailbox } from "./tools/deleteMailbox.js";
 import { sendMessageSchema, handleSendMessage } from "./tools/sendMessage.js";
+import type { ToolExtra } from "./types.js";
 import { processDeleteRulesSchema, handleProcessDeleteRules } from "./tools/processDeleteRules.js";
 import { processJunkRulesSchema, handleProcessJunkRules } from "./tools/processJunkRules.js";
 import { processKeepLatestRulesSchema, handleProcessKeepLatestRules } from "./tools/processKeepLatestRules.js";
@@ -174,13 +175,23 @@ server.tool(
 
 // --- Rule-Based Cleanup ---
 
+function extractExtra(extra: Record<string, unknown>) {
+  const meta = extra._meta as Record<string, unknown> | undefined;
+  const progressToken = meta?.progressToken as string | number | undefined;
+  const sendNotification = extra.sendNotification as ((n: unknown) => Promise<void>) | undefined;
+  if (progressToken != null && sendNotification) {
+    return { progressToken, sendNotification: sendNotification as ToolExtra["sendNotification"] };
+  }
+  return undefined;
+}
+
 server.tool(
   "process_delete_rules",
   "Delete all messages from senders listed in config.json delete rules. Moves them to Deleted Messages.",
   processDeleteRulesSchema,
-  async () => {
+  async (_args, extra) => {
     try {
-      const result = await handleProcessDeleteRules();
+      const result = await handleProcessDeleteRules(extractExtra(extra));
       return { content: [{ type: "text", text: result }] };
     } catch (error) {
       return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
@@ -192,9 +203,9 @@ server.tool(
   "process_junk_rules",
   "Move all messages from senders listed in config.json junk rules to the Junk folder.",
   processJunkRulesSchema,
-  async () => {
+  async (extra) => {
     try {
-      const result = await handleProcessJunkRules();
+      const result = await handleProcessJunkRules(extractExtra(extra));
       return { content: [{ type: "text", text: result }] };
     } catch (error) {
       return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
@@ -206,9 +217,9 @@ server.tool(
   "process_keep_latest_rules",
   "For senders in config.json keepLatest rules, keep only the most recent message and trash the rest.",
   processKeepLatestRulesSchema,
-  async () => {
+  async (extra) => {
     try {
-      const result = await handleProcessKeepLatestRules();
+      const result = await handleProcessKeepLatestRules(extractExtra(extra));
       return { content: [{ type: "text", text: result }] };
     } catch (error) {
       return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
@@ -220,9 +231,9 @@ server.tool(
   "process_all_rules",
   "Run all configured email cleanup rules (delete, junk, keep-latest) from config.json in sequence.",
   processAllRulesSchema,
-  async () => {
+  async (extra) => {
     try {
-      const result = await handleProcessAllRules();
+      const result = await handleProcessAllRules(extractExtra(extra));
       return { content: [{ type: "text", text: result }] };
     } catch (error) {
       return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
