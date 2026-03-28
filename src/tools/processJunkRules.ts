@@ -2,7 +2,8 @@ import { getImapClient } from "../imap.js";
 import { loadConfig } from "../config.js";
 import type { ProgressCallback } from "../types.js";
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50;
+const TIME_BUDGET_MS = 45000; // Stop after 45 seconds to stay under 60s timeout
 
 export const processJunkRulesSchema = {};
 
@@ -26,8 +27,14 @@ export async function handleProcessJunkRules(progress?: ProgressCallback): Promi
   const results: SenderResult[] = [];
   let totalJunked = 0;
   let hasRemaining = false;
+  const startTime = Date.now();
 
   for (let i = 0; i < senders.length; i++) {
+    if (Date.now() - startTime > TIME_BUDGET_MS) {
+      hasRemaining = true;
+      break;
+    }
+
     const sender = senders[i];
     if (progress) await progress(`[junk ${i + 1}/${senders.length}] ${sender}`);
 
@@ -57,5 +64,11 @@ export async function handleProcessJunkRules(progress?: ProgressCallback): Promi
     }
   }
 
-  return JSON.stringify({ processed: results, totalJunked, hasRemaining }, null, 2);
+  return JSON.stringify({
+    processed: results,
+    totalJunked,
+    hasRemaining,
+    sendersProcessed: results.length,
+    sendersTotal: senders.length,
+  }, null, 2);
 }

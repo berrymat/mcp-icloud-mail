@@ -2,7 +2,8 @@ import { getImapClient } from "../imap.js";
 import { loadConfig } from "../config.js";
 import type { ProgressCallback } from "../types.js";
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50;
+const TIME_BUDGET_MS = 45000;
 
 export const processKeepLatestRulesSchema = {};
 
@@ -27,8 +28,14 @@ export async function handleProcessKeepLatestRules(progress?: ProgressCallback):
   const results: SenderResult[] = [];
   let totalTrashed = 0;
   let hasRemaining = false;
+  const startTime = Date.now();
 
   for (let i = 0; i < senders.length; i++) {
+    if (Date.now() - startTime > TIME_BUDGET_MS) {
+      hasRemaining = true;
+      break;
+    }
+
     const sender = senders[i];
     if (progress) await progress(`[keepLatest ${i + 1}/${senders.length}] ${sender}`);
 
@@ -70,5 +77,11 @@ export async function handleProcessKeepLatestRules(progress?: ProgressCallback):
     }
   }
 
-  return JSON.stringify({ processed: results, totalTrashed, hasRemaining }, null, 2);
+  return JSON.stringify({
+    processed: results,
+    totalTrashed,
+    hasRemaining,
+    sendersProcessed: results.length,
+    sendersTotal: senders.length,
+  }, null, 2);
 }

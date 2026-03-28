@@ -2,7 +2,8 @@ import { getImapClient } from "../imap.js";
 import { loadConfig } from "../config.js";
 import type { ProgressCallback } from "../types.js";
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50;
+const TIME_BUDGET_MS = 45000;
 
 export const processDeleteRulesSchema = {};
 
@@ -26,8 +27,14 @@ export async function handleProcessDeleteRules(progress?: ProgressCallback): Pro
   const results: SenderResult[] = [];
   let totalDeleted = 0;
   let hasRemaining = false;
+  const startTime = Date.now();
 
   for (let i = 0; i < senders.length; i++) {
+    if (Date.now() - startTime > TIME_BUDGET_MS) {
+      hasRemaining = true;
+      break;
+    }
+
     const sender = senders[i];
     if (progress) await progress(`[delete ${i + 1}/${senders.length}] ${sender}`);
 
@@ -57,5 +64,11 @@ export async function handleProcessDeleteRules(progress?: ProgressCallback): Pro
     }
   }
 
-  return JSON.stringify({ processed: results, totalDeleted, hasRemaining }, null, 2);
+  return JSON.stringify({
+    processed: results,
+    totalDeleted,
+    hasRemaining,
+    sendersProcessed: results.length,
+    sendersTotal: senders.length,
+  }, null, 2);
 }
