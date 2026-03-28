@@ -1,14 +1,14 @@
 import { handleProcessDeleteRules } from "./processDeleteRules.js";
 import { handleProcessJunkRules } from "./processJunkRules.js";
 import { handleProcessKeepLatestRules } from "./processKeepLatestRules.js";
-import type { ToolExtra } from "../types.js";
+import type { ProgressCallback } from "../types.js";
 
 export const processAllRulesSchema = {};
 
-export async function handleProcessAllRules(extra?: ToolExtra): Promise<string> {
-  const deleteResult = JSON.parse(await handleProcessDeleteRules(extra));
-  const junkResult = JSON.parse(await handleProcessJunkRules(extra));
-  const keepLatestResult = JSON.parse(await handleProcessKeepLatestRules(extra));
+export async function handleProcessAllRules(progress?: ProgressCallback): Promise<string> {
+  const deleteResult = JSON.parse(await handleProcessDeleteRules(progress));
+  const junkResult = JSON.parse(await handleProcessJunkRules(progress));
+  const keepLatestResult = JSON.parse(await handleProcessKeepLatestRules(progress));
 
   return JSON.stringify({
     delete: deleteResult,

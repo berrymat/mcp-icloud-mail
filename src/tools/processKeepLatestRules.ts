@@ -1,6 +1,6 @@
 import { getImapClient } from "../imap.js";
 import { loadConfig } from "../config.js";
-import type { ToolExtra } from "../types.js";
+import type { ProgressCallback } from "../types.js";
 
 export const processKeepLatestRulesSchema = {};
 
@@ -11,7 +11,7 @@ interface SenderResult {
   error?: string;
 }
 
-export async function handleProcessKeepLatestRules(extra?: ToolExtra): Promise<string> {
+export async function handleProcessKeepLatestRules(progress?: ProgressCallback): Promise<string> {
   const config = await loadConfig();
   const senders = config.rules.keepLatest.senders;
   const markAsRead = config.rules.keepLatest.markAsRead;
@@ -26,6 +26,8 @@ export async function handleProcessKeepLatestRules(extra?: ToolExtra): Promise<s
 
   for (let i = 0; i < senders.length; i++) {
     const sender = senders[i];
+    if (progress) await progress(`[keepLatest ${i + 1}/${senders.length}] Searching for: ${sender}`);
+
     const lock = await client.getMailboxLock("INBOX");
     try {
       const uids = await client.search({ from: sender }, { uid: true });
@@ -34,7 +36,6 @@ export async function handleProcessKeepLatestRules(extra?: ToolExtra): Promise<s
       if (uidList.length === 0) {
         results.push({ sender, kept: null, trashed: 0 });
       } else {
-        // Highest UID = newest message
         const sorted = [...uidList].sort((a, b) => b - a);
         const keepUid = sorted[0];
         const trashUids = sorted.slice(1);
@@ -44,11 +45,10 @@ export async function handleProcessKeepLatestRules(extra?: ToolExtra): Promise<s
         }
 
         if (trashUids.length > 0) {
-          const trashRange = trashUids.join(",");
           if (markAsRead) {
-            await client.messageFlagsAdd(trashRange, ["\\Seen"], { uid: true });
+            await client.messageFlagsAdd(trashUids.join(","), ["\\Seen"], { uid: true });
           }
-          await client.messageMove(trashRange, "Deleted Messages", { uid: true });
+          await client.messageMove(trashUids.join(","), "Deleted Messages", { uid: true });
           totalTrashed += trashUids.length;
         }
 
@@ -60,12 +60,7 @@ export async function handleProcessKeepLatestRules(extra?: ToolExtra): Promise<s
       lock.release();
     }
 
-    if (extra) {
-      await extra.sendNotification({
-        method: "notifications/progress",
-        params: { progressToken: extra.progressToken!, progress: i + 1, total: senders.length, message: `Processed ${sender}` },
-      });
-    }
+    if (progress) await progress(`[keepLatest ${i + 1}/${senders.length}] ${sender}: kept 1, trashed ${results[results.length - 1].trashed}`);
   }
 
   return JSON.stringify({ processed: results, totalTrashed }, null, 2);

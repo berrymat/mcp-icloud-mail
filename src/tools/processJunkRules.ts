@@ -1,6 +1,6 @@
 import { getImapClient } from "../imap.js";
 import { loadConfig } from "../config.js";
-import type { ToolExtra } from "../types.js";
+import type { ProgressCallback } from "../types.js";
 
 export const processJunkRulesSchema = {};
 
@@ -10,7 +10,7 @@ interface SenderResult {
   error?: string;
 }
 
-export async function handleProcessJunkRules(extra?: ToolExtra): Promise<string> {
+export async function handleProcessJunkRules(progress?: ProgressCallback): Promise<string> {
   const config = await loadConfig();
   const senders = config.rules.junk.senders;
   const markAsRead = config.rules.junk.markAsRead;
@@ -25,6 +25,8 @@ export async function handleProcessJunkRules(extra?: ToolExtra): Promise<string>
 
   for (let i = 0; i < senders.length; i++) {
     const sender = senders[i];
+    if (progress) await progress(`[junk ${i + 1}/${senders.length}] Searching for: ${sender}`);
+
     const lock = await client.getMailboxLock("INBOX");
     try {
       const uids = await client.search({ from: sender }, { uid: true });
@@ -33,13 +35,10 @@ export async function handleProcessJunkRules(extra?: ToolExtra): Promise<string>
       if (uidList.length === 0) {
         results.push({ sender, count: 0 });
       } else {
-        const uidRange = uidList.join(",");
-
         if (markAsRead) {
-          await client.messageFlagsAdd(uidRange, ["\\Seen"], { uid: true });
+          await client.messageFlagsAdd(uidList.join(","), ["\\Seen"], { uid: true });
         }
-
-        await client.messageMove(uidRange, "Junk", { uid: true });
+        await client.messageMove(uidList.join(","), "Junk", { uid: true });
         totalJunked += uidList.length;
         results.push({ sender, count: uidList.length });
       }
@@ -49,12 +48,7 @@ export async function handleProcessJunkRules(extra?: ToolExtra): Promise<string>
       lock.release();
     }
 
-    if (extra) {
-      await extra.sendNotification({
-        method: "notifications/progress",
-        params: { progressToken: extra.progressToken!, progress: i + 1, total: senders.length, message: `Processed ${sender}` },
-      });
-    }
+    if (progress) await progress(`[junk ${i + 1}/${senders.length}] ${sender}: ${results[results.length - 1].count} junked`);
   }
 
   return JSON.stringify({ processed: results, totalJunked }, null, 2);
