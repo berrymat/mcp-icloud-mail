@@ -2,12 +2,15 @@ import { getImapClient } from "../imap.js";
 import { loadConfig } from "../config.js";
 import type { ProgressCallback } from "../types.js";
 
+const BATCH_SIZE = 100;
+
 export const processKeepLatestRulesSchema = {};
 
 interface SenderResult {
   sender: string;
   kept: number | null;
   trashed: number;
+  remaining: number;
   error?: string;
 }
 
@@ -23,10 +26,11 @@ export async function handleProcessKeepLatestRules(progress?: ProgressCallback):
   const client = await getImapClient();
   const results: SenderResult[] = [];
   let totalTrashed = 0;
+  let hasRemaining = false;
 
   for (let i = 0; i < senders.length; i++) {
     const sender = senders[i];
-    if (progress) await progress(`[keepLatest ${i + 1}/${senders.length}] Searching for: ${sender}`);
+    if (progress) await progress(`[keepLatest ${i + 1}/${senders.length}] ${sender}`);
 
     const lock = await client.getMailboxLock("INBOX");
     try {
@@ -34,34 +38,37 @@ export async function handleProcessKeepLatestRules(progress?: ProgressCallback):
       const uidList = Array.isArray(uids) ? uids : [];
 
       if (uidList.length === 0) {
-        results.push({ sender, kept: null, trashed: 0 });
+        results.push({ sender, kept: null, trashed: 0, remaining: 0 });
       } else {
         const sorted = [...uidList].sort((a, b) => b - a);
         const keepUid = sorted[0];
-        const trashUids = sorted.slice(1);
+        const allTrashUids = sorted.slice(1);
 
         if (markAsRead) {
           await client.messageFlagsAdd(String(keepUid), ["\\Seen"], { uid: true });
         }
 
-        if (trashUids.length > 0) {
-          if (markAsRead) {
-            await client.messageFlagsAdd(trashUids.join(","), ["\\Seen"], { uid: true });
-          }
-          await client.messageMove(trashUids.join(","), "Deleted Messages", { uid: true });
-          totalTrashed += trashUids.length;
-        }
+        if (allTrashUids.length > 0) {
+          const batch = allTrashUids.slice(0, BATCH_SIZE);
+          const remaining = allTrashUids.length - batch.length;
 
-        results.push({ sender, kept: keepUid, trashed: trashUids.length });
+          if (markAsRead) {
+            await client.messageFlagsAdd(batch.join(","), ["\\Seen"], { uid: true });
+          }
+          await client.messageMove(batch.join(","), "Deleted Messages", { uid: true });
+          totalTrashed += batch.length;
+          if (remaining > 0) hasRemaining = true;
+          results.push({ sender, kept: keepUid, trashed: batch.length, remaining });
+        } else {
+          results.push({ sender, kept: keepUid, trashed: 0, remaining: 0 });
+        }
       }
     } catch (error) {
-      results.push({ sender, kept: null, trashed: 0, error: error instanceof Error ? error.message : String(error) });
+      results.push({ sender, kept: null, trashed: 0, remaining: 0, error: error instanceof Error ? error.message : String(error) });
     } finally {
       lock.release();
     }
-
-    if (progress) await progress(`[keepLatest ${i + 1}/${senders.length}] ${sender}: kept 1, trashed ${results[results.length - 1].trashed}`);
   }
 
-  return JSON.stringify({ processed: results, totalTrashed }, null, 2);
+  return JSON.stringify({ processed: results, totalTrashed, hasRemaining }, null, 2);
 }
