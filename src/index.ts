@@ -167,7 +167,7 @@ server.tool("delete_mailbox",
 // --- Send Operations ---
 
 server.tool("send_message",
-  "Compose and send an email via SMTP. Supports plain text, HTML, CC, BCC, and reply threading.",
+  "Compose and send an email via SMTP, saving a copy to the Sent mailbox. Supports plain text, HTML, CC, BCC, and reply threading.",
   sendMessageSchema,
   wrapArgs(async (args) => {
     const h = await load<(args: unknown) => Promise<string>>("./tools/sendMessage.js", "handleSendMessage");
