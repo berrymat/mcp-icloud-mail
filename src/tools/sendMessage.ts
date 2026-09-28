@@ -1,7 +1,8 @@
 import { z } from "zod";
 import MailComposer from "nodemailer/lib/mail-composer/index.js";
 import { getSmtpTransporter } from "../smtp.js";
-import { getImapClient, getSentMailboxPath } from "../imap.js";
+import { getImapClient } from "../imap.js";
+import type { ImapFlow } from "imapflow";
 
 export const sendMessageSchema = {
   to: z.array(z.string()).min(1).describe("Recipient email addresses"),
@@ -23,6 +24,35 @@ interface SendMessageArgs {
   html?: string;
   inReplyTo?: string;
   references?: string[];
+}
+
+let sentMailboxPath: string | null = null;
+
+/**
+ * Resolve the mailbox that mail clients treat as Sent.
+ *
+ * Order matters: iCloud's real Sent folder is "Sent Messages", which the
+ * server advertises with the \Sent SPECIAL-USE attribute (in `flags`).
+ * imapflow's `specialUse` property, by contrast, can come from a name-based
+ * guess and may land on a stale folder literally named "Sent", so it is
+ * only a fallback here.
+ */
+async function getSentMailboxPath(imap: ImapFlow): Promise<string> {
+  if (sentMailboxPath) return sentMailboxPath;
+
+  const mailboxes = await imap.list();
+  const sent =
+    mailboxes.find((mb) => mb.flags.has("\\Sent")) ??
+    mailboxes.find((mb) => mb.path === "Sent Messages") ??
+    mailboxes.find((mb) => mb.specialUse === "\\Sent") ??
+    mailboxes.find((mb) => mb.name.toLowerCase() === "sent");
+
+  if (!sent) {
+    throw new Error("Could not find a Sent mailbox on the server");
+  }
+
+  sentMailboxPath = sent.path;
+  return sentMailboxPath;
 }
 
 export async function handleSendMessage(args: SendMessageArgs): Promise<string> {
