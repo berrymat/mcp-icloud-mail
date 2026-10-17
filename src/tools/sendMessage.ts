@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { stat } from "node:fs/promises";
+import { basename, resolve } from "node:path";
 import MailComposer from "nodemailer/lib/mail-composer/index.js";
+import type { Attachment } from "nodemailer/lib/mailer/index.js";
 import { getSmtpTransporter } from "../smtp.js";
 import { getImapClient } from "../imap.js";
 import type { ImapFlow } from "imapflow";
@@ -13,6 +16,13 @@ export const sendMessageSchema = {
   html: z.string().optional().describe("HTML body"),
   inReplyTo: z.string().optional().describe("Message-ID of the email being replied to"),
   references: z.array(z.string()).optional().describe("Message-ID references for threading"),
+  attachments: z.array(z.object({
+    path: z.string().optional().describe("Absolute path to a local file to attach (preferred for files on disk)"),
+    content: z.string().optional().describe("Base64-encoded file content (use instead of path for generated content)"),
+    filename: z.string().optional().describe("Filename shown to the recipient; defaults to the basename of path. Required with content."),
+    contentType: z.string().optional().describe("MIME type, e.g. application/pdf; inferred from filename if omitted"),
+    cid: z.string().optional().describe("Content-ID for inline images referenced from the HTML body as <img src=\"cid:...\">"),
+  })).optional().describe("Files to attach. Each entry needs exactly one of path or content."),
 };
 
 interface SendMessageArgs {
@@ -24,6 +34,63 @@ interface SendMessageArgs {
   html?: string;
   inReplyTo?: string;
   references?: string[];
+  attachments?: AttachmentArg[];
+}
+
+interface AttachmentArg {
+  path?: string;
+  content?: string;
+  filename?: string;
+  contentType?: string;
+  cid?: string;
+}
+
+interface AttachmentSummary {
+  filename: string;
+  size: number;
+  contentType?: string;
+  cid?: string;
+}
+
+/**
+ * Validate attachment arguments up front so a bad path or missing filename
+ * fails before anything is sent, and convert them to nodemailer's shape.
+ */
+async function buildAttachments(
+  args: AttachmentArg[] | undefined
+): Promise<{ attachments: Attachment[]; summary: AttachmentSummary[] }> {
+  const attachments: Attachment[] = [];
+  const summary: AttachmentSummary[] = [];
+
+  for (const [i, a] of (args ?? []).entries()) {
+    const label = `attachments[${i}]`;
+    if (!!a.path === !!a.content) {
+      throw new Error(`${label}: provide exactly one of path or content`);
+    }
+
+    if (a.path) {
+      const fullPath = resolve(a.path);
+      let size: number;
+      try {
+        const info = await stat(fullPath);
+        if (!info.isFile()) throw new Error("not a regular file");
+        size = info.size;
+      } catch (err) {
+        throw new Error(`${label}: cannot read ${fullPath}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      const filename = a.filename ?? basename(fullPath);
+      attachments.push({ path: fullPath, filename, contentType: a.contentType, cid: a.cid });
+      summary.push({ filename, size, contentType: a.contentType, cid: a.cid });
+    } else {
+      if (!a.filename) throw new Error(`${label}: filename is required when using content`);
+      const buffer = Buffer.from(a.content!, "base64");
+      if (buffer.length === 0) throw new Error(`${label}: content is empty or not valid base64`);
+      attachments.push({ content: buffer, filename: a.filename, contentType: a.contentType, cid: a.cid });
+      summary.push({ filename: a.filename, size: buffer.length, contentType: a.contentType, cid: a.cid });
+    }
+  }
+
+  return { attachments, summary };
 }
 
 let sentMailboxPath: string | null = null;
@@ -62,6 +129,8 @@ export async function handleSendMessage(args: SendMessageArgs): Promise<string> 
     throw new Error("ICLOUD_EMAIL environment variable is required.");
   }
 
+  const { attachments, summary: attachmentSummary } = await buildAttachments(args.attachments);
+
   // Build the MIME message once so the copy saved to Sent is byte-for-byte
   // the message that went over the wire (same Message-ID, Date, boundaries).
   const node = new MailComposer({
@@ -74,6 +143,7 @@ export async function handleSendMessage(args: SendMessageArgs): Promise<string> 
     html: args.html,
     inReplyTo: args.inReplyTo,
     references: args.references?.join(" "),
+    attachments,
   }).compile();
 
   const messageId = node.messageId();
@@ -109,6 +179,7 @@ export async function handleSendMessage(args: SendMessageArgs): Promise<string> 
     messageId,
     to: args.to,
     subject: args.subject,
+    attachments: attachmentSummary,
     sentCopy,
   });
 }

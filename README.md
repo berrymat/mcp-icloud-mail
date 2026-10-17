@@ -8,7 +8,7 @@ MCP server for iCloud Mail (IMAP/SMTP) with rule-based inbox cleanup tools.
 - `list_messages` — paginated message list
 - `search_messages` — search by sender, subject, date, etc.
 - `get_message` — read a message
-- `send_message` — send an email (a copy is saved to the Sent mailbox)
+- `send_message` — send an email with optional attachments (a copy is saved to the Sent mailbox)
 - `move_messages` — move messages between mailboxes
 - `delete_messages` — permanently delete messages
 - `flag_messages` — flag/unflag messages
@@ -17,6 +17,24 @@ MCP server for iCloud Mail (IMAP/SMTP) with rule-based inbox cleanup tools.
 - `process_keep_latest_rules` — keep only the newest message per sender, trash the rest
 - `process_archive_read` — move read messages older than `daysOld` to Archive, or to a sender-specific mailbox
 - `process_all_rules` — run all four rule passes in sequence
+
+### Attachments
+
+`send_message` accepts an `attachments` array. Each entry has exactly one of `path` (a local file) or `content` (base64), plus optional `filename`, `contentType` and `cid`:
+
+```json
+{
+  "to": ["someone@example.com"],
+  "subject": "Report",
+  "html": "<p>See attached.</p><img src=\"cid:chart\">",
+  "attachments": [
+    { "path": "/Users/me/Documents/report.pdf" },
+    { "content": "iVBORw0KGgo...", "filename": "chart.png", "cid": "chart" }
+  ]
+}
+```
+
+Use `path` for files already on disk; `filename` defaults to the file's basename. Use `content` for generated data, where `filename` is required. A `cid` makes the attachment inline, so the HTML body can reference it with `cid:`.
 
 ## Configuration
 
