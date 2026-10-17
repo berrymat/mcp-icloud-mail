@@ -25,10 +25,12 @@ export async function handleGetMessage(args: GetMessageArgs): Promise<string> {
 
     const parsed = await simpleParser(raw.content);
 
-    const attachments = parsed.attachments?.map((att) => ({
+    const attachments = parsed.attachments?.map((att, index) => ({
+      index,
       filename: att.filename,
       contentType: att.contentType,
       size: att.size,
+      cid: att.cid || undefined,
     })) ?? [];
 
     return JSON.stringify({

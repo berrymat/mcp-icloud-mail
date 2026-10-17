@@ -12,6 +12,7 @@ import { listMailboxesSchema } from "./tools/listMailboxes.js";
 import { listMessagesSchema } from "./tools/listMessages.js";
 import { searchMessagesSchema } from "./tools/searchMessages.js";
 import { getMessageSchema } from "./tools/getMessage.js";
+import { getAttachmentSchema } from "./tools/getAttachment.js";
 import { moveMessagesSchema } from "./tools/moveMessages.js";
 import { deleteMessagesSchema } from "./tools/deleteMessages.js";
 import { flagMessagesSchema } from "./tools/flagMessages.js";
@@ -108,10 +109,19 @@ server.tool("search_messages",
 );
 
 server.tool("get_message",
-  "Fetch full message content by UID: headers, text/HTML body, and attachment metadata",
+  "Fetch full message content by UID: headers, text/HTML body, and attachment metadata (index, filename, type, size). Use get_attachment to read an attachment.",
   getMessageSchema,
   wrapArgs(async (args) => {
     const h = await load<(args: unknown) => Promise<string>>("./tools/getMessage.js", "handleGetMessage");
+    return h(args);
+  })
+);
+
+server.tool("get_attachment",
+  "Read one attachment from a message, selected by filename or index. With saveDir, writes the file there and returns the path; otherwise returns the content inline (text types as text, others as base64, up to 2MB).",
+  getAttachmentSchema,
+  wrapArgs(async (args) => {
+    const h = await load<(args: unknown) => Promise<string>>("./tools/getAttachment.js", "handleGetAttachment");
     return h(args);
   })
 );

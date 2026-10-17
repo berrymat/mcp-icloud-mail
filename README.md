@@ -7,7 +7,8 @@ MCP server for iCloud Mail (IMAP/SMTP) with rule-based inbox cleanup tools.
 - `list_mailboxes` — list all mailboxes
 - `list_messages` — paginated message list
 - `search_messages` — search by sender, subject, date, etc.
-- `get_message` — read a message
+- `get_message` — read a message, including a list of its attachments
+- `get_attachment` — read one attachment: save it to a directory, or get its content inline (text or base64)
 - `send_message` — send an email with optional attachments (a copy is saved to the Sent mailbox)
 - `move_messages` — move messages between mailboxes
 - `delete_messages` — permanently delete messages
@@ -35,6 +36,16 @@ MCP server for iCloud Mail (IMAP/SMTP) with rule-based inbox cleanup tools.
 ```
 
 Use `path` for files already on disk; `filename` defaults to the file's basename. Use `content` for generated data, where `filename` is required. A `cid` makes the attachment inline, so the HTML body can reference it with `cid:`.
+
+### Reading attachments
+
+`get_message` lists each attachment with its `index`, `filename`, `contentType` and `size`. Fetch one with `get_attachment`, selecting it by `filename` or `index` (optional when the message has a single attachment):
+
+```json
+{ "mailbox": "INBOX", "uid": 12345, "filename": "invoice.pdf", "saveDir": "/Users/me/Downloads" }
+```
+
+With `saveDir` the file is written there (never overwriting an existing file) and the result returns `savedTo`. Without it the content comes back inline: text-like types as UTF-8 text, anything else as base64, limited to 2 MB. Pass `asBase64: true` to force base64 for a text type.
 
 ## Configuration
 
