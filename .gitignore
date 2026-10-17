@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 config.json
+scripts/drain.env
+scripts/drain-scheduled.log
+scripts/launchd.log
+drain-*.log

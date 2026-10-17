@@ -22,6 +22,7 @@ import { processDeleteRulesSchema } from "./tools/processDeleteRules.js";
 import { processJunkRulesSchema } from "./tools/processJunkRules.js";
 import { processKeepLatestRulesSchema } from "./tools/processKeepLatestRules.js";
 import { processAllRulesSchema } from "./tools/processAllRules.js";
+import { processArchiveReadSchema } from "./tools/processArchiveRead.js";
 import { disconnectImap } from "./imap.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -207,8 +208,18 @@ server.tool("process_keep_latest_rules",
   })
 );
 
+server.tool("process_archive_read",
+  "Move read messages older than configured daysOld to Archive (or sender-specific folders). Configured in config.json archiveRead rule.",
+  processArchiveReadSchema,
+  wrap(async () => {
+    const { createProgressCallback } = await import("./types.js");
+    const h = await load<(progress?: unknown) => Promise<string>>("./tools/processArchiveRead.js", "handleProcessArchiveRead");
+    return h(createProgressCallback(server));
+  })
+);
+
 server.tool("process_all_rules",
-  "Run all configured email cleanup rules (delete, junk, keep-latest) from config.json in sequence.",
+  "Run all configured email cleanup rules (delete, junk, keep-latest, archive-read) from config.json in sequence.",
   processAllRulesSchema,
   wrap(async () => {
     const { createProgressCallback } = await import("./types.js");

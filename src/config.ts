@@ -9,15 +9,30 @@ const ruleSchema = z.object({
   markAsRead: z.boolean().default(false),
 });
 
+const archiveSenderRuleSchema = z.object({
+  senders: z.array(z.string()),
+  mailbox: z.string(),
+});
+
+const archiveReadRuleSchema = z.object({
+  description: z.string().optional(),
+  daysOld: z.number().default(60),
+  defaultMailbox: z.string().default("Archive"),
+  senderRules: z.array(archiveSenderRuleSchema).default([]),
+});
+
 const configSchema = z.object({
   rules: z.object({
     delete: ruleSchema.default({ senders: [] }),
     junk: ruleSchema.default({ senders: [] }),
     keepLatest: ruleSchema.default({ senders: [] }),
+    archiveRead: archiveReadRuleSchema.optional(),
   }).default({}),
 });
 
 export type RuleConfig = z.infer<typeof ruleSchema>;
+export type ArchiveSenderRule = z.infer<typeof archiveSenderRuleSchema>;
+export type ArchiveReadRule = z.infer<typeof archiveReadRuleSchema>;
 export type Config = z.infer<typeof configSchema>;
 
 export async function loadConfig(): Promise<Config> {

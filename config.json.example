@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "delete": {
+      "description": "Messages from these senders are moved to Deleted Messages",
+      "senders": ["potterybarn", "newsletter@example.com"],
+      "markAsRead": false
+    },
+    "junk": {
+      "description": "Messages from these senders are moved to Junk",
+      "senders": ["spammer", "unwanted@example.com"],
+      "markAsRead": false
+    },
+    "keepLatest": {
+      "description": "Keep only the newest message per sender, trash the rest",
+      "senders": ["nytimes", "github"],
+      "markAsRead": true
+    },
+    "archiveRead": {
+      "description": "Move read messages older than daysOld days to Archive; senderRules match first",
+      "daysOld": 60,
+      "defaultMailbox": "Archive",
+      "senderRules": [
+        { "senders": ["jira@", "atlassian.net"], "mailbox": "Archive/Work" },
+        { "senders": ["chase.com", "fidelity"], "mailbox": "Archive/Finance" }
+      ]
+    }
+  }
+}
